@@ -174,9 +174,9 @@ class Bamboo(Predictor):
       self.set_branch_index(i)
       # TODO
       if i > 0:
-         FLAGS.overwrite = False
+         # FLAGS.overwrite = False
          FLAGS.save_best = True
-         self.launch_model(FLAGS.overwrite and FLAGS.train)
+         # self.launch_model(FLAGS.overwrite and FLAGS.train)
          if i == self.branches_num:
           self._branches_variables_assign(0, output=True)
          else:
@@ -201,6 +201,13 @@ class Bamboo(Predictor):
           self._session.run(tf.assign(self.children[-1].var_list[i], self.branches[-1].var_list[i]))
         else:
           self._session.run(tf.assign(self.branches[index].var_list[i], self.branches[index - 1].var_list[i]))
+
+  def _optimizer_lr_modify(self, lr):
+    if hasattr(self._optimizer, '_lr'):
+      self._optimizer._lr = lr
+    else:
+      assert hasattr(self._optimizer, '_leanrning_rate')
+      self._optimizer._learning_rate = lr
 
   def predict(self, data, **kwargs):
     index = kwargs.get('branch_index', 0)

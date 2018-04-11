@@ -129,12 +129,6 @@ class Model(object):
       raise TypeError('loss must be a tensor')
     self._loss = loss
 
-  def _optimizer_lr_modify(self, lr):
-    if hasattr(self._optimizer, '_lr'):
-      self._optimizer._lr = lr
-    else:
-      self._optimizer._learning_rate = lr
-
   @with_graph
   def variable_assign(self, tensor1_name, tensor2_name):
     variables = tf.trainable_variables()
