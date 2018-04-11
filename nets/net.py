@@ -39,6 +39,14 @@ class Net(Function):
   # region : Properties
 
   @property
+  def branches(self):
+    return [net for net in self.children if net.is_branch]
+
+  @property
+  def branches_num(self):
+    return len(self.branches)
+
+  @property
   def var_list(self):
     return [var for var in tf.trainable_variables()
             if '{}'.format(self._name) == var.name.split('/')[self._level]]

@@ -11,6 +11,8 @@ from tframe import with_graph
 from tframe import Predictor
 from tframe.nets.net import Net
 from tframe.models import Feedforward
+from tframe.layers import Linear
+from tframe import initializers
 
 from tframe import console
 from tframe import losses
@@ -21,7 +23,7 @@ from tframe import FLAGS
 
 
 class Bamboo(Predictor):
-  def __init__(self, mark=None):
+  def __init__(self, mark=None, **kwargs):
     # Call parent's initializer
     Predictor.__init__(self, mark)
     # Private fields
@@ -29,7 +31,9 @@ class Bamboo(Predictor):
     self._losses = []
     self._metrics = []
     self._train_ops = []
+    self._var_list = []
     self._branch_index = 0
+    self._identity_initial = kwargs.get('identity', False)
 
 
   def set_branch_index(self, index):
@@ -46,8 +50,10 @@ class Bamboo(Predictor):
 
 
   @with_graph
-  def build(self, loss='cross_entropy', optimizer=None,
+  def build(self, loss='cross_entropy', lr_list=None, optimizer=None,
             metric=None, metric_name='Metric'):
+    if self._identity_initial:
+      self._initial_define()
     Feedforward.build(self)
     # Check branch shapes
     output_shape = self.outputs.get_shape().as_list()
@@ -96,6 +102,19 @@ class Bamboo(Predictor):
     self._output_list = output_list
     self._built = True
 
+  @with_graph
+  def _initial_define(self):
+    for i, net in enumerate(self.children):
+      if i == 0 or i == len(self.children) - 1:
+        continue
+      if net.is_branch is True:
+        # define in traning step
+        continue
+      else:
+          for f in net.children:
+           if isinstance(f, Linear):
+             f._weight_initializer = initializers.get('identity')
+             f._bias_initializer = initializers.get(tf.zeros_initializer())
 
   @with_graph
   def _define_train_step(self, optimizer=None, var_list=None):
@@ -111,11 +130,33 @@ class Bamboo(Predictor):
         if net.is_branch or i == len(self.children) - 1:
           self._train_ops.append(optimizer.minimize(
             loss=self._losses[loss_index], var_list=var_list))
+          self._var_list.append(var_list)
           loss_index += 1
           var_list = []
 
     assert len(self._losses) == len(self._train_ops)
 
+  @with_graph
+  def _define_train_step_lr(self, lr_list=None):
+    assert len(self._losses) > 0
+    assert len(self.branches) + 1 == len(lr_list)
+    with tf.name_scope('Optimizer'):
+      var_list = []
+      loss_index = 0
+      lr_index = 0
+      for i, net in enumerate(self.children):
+        assert isinstance(net, Net)
+        var_list += net.var_list
+        if net.is_branch or i == len(self.children) - 1:
+          optimizer = tf.train.AdamOptimizer(lr_list[lr_index])
+          self._optimizer = optimizer
+          self._train_ops.append(optimizer.minimize(
+            loss=self._losses[loss_index], var_list=var_list))
+          loss_index += 1
+          lr_index += 1
+          var_list = []
+
+    assert len(self._losses) == len(self._train_ops)
 
   @with_graph
   def train(self, *args, branch_index=0, **kwargs):
@@ -126,6 +167,40 @@ class Bamboo(Predictor):
     # Call parent's train method
     Predictor.train(self, *args, **kwargs)
 
+  @with_graph
+  def train_to_the_top(self, *args, lr_list=None, **kwargs):
+    if lr_list is None:lr_list = [0.000088] * self.branches_num
+    for i in range(self.branches_num + 1):
+      self.set_branch_index(i)
+      # TODO
+      if i > 0:
+         FLAGS.overwrite = False
+         FLAGS.save_best = True
+         self.launch_model(FLAGS.overwrite and FLAGS.train)
+         if i == self.branches_num:
+          self._branches_variables_assign(0, output=True)
+         else:
+          self._branches_variables_assign(i)
+      self._optimizer_lr_modify(lr_list[i])
+      self._train_step = self._optimizer.minimize(loss=self._losses[i], var_list=self._var_list[i])
+      Predictor.train(self, *args, **kwargs)
+
+  @with_graph
+  def _variables_assign(self, index):
+    value_weights = self.branches[index - 1].children[0]._weights
+    ref_weights = self.branches[index].children[0]._weights
+    value_bias = self.branches[index - 1].children[0]._biases
+    ref_bias = self.branches[index].children[0]._biases
+    tf.assign(ref_weights, value_weights)
+    tf.assign(ref_bias, value_bias)
+
+  @with_graph
+  def _branches_variables_assign(self, index, output=False):
+      for i in range(len(self.branches[index].var_list)):
+        if output:
+          self._session.run(tf.assign(self.children[-1].var_list[i], self.branches[-1].var_list[i]))
+        else:
+          self._session.run(tf.assign(self.branches[index].var_list[i], self.branches[index - 1].var_list[i]))
 
   def predict(self, data, **kwargs):
     index = kwargs.get('branch_index', 0)

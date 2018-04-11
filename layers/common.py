@@ -91,6 +91,9 @@ class Linear(Layer):
     self._use_bias = use_bias
 
     self._weight_initializer = initializers.get(weight_initializer)
+    self._identify_initial = False
+    if weight_initializer in ['identity']:
+      self._identify_initial = True
     self._bias_initializer = initializers.get(bias_initializer)
     self._weight_regularizer = regularizers.get(weight_regularizer, **kwargs)
     self._bias_regularizer = regularizers.get(bias_regularizer, **kwargs)
@@ -114,6 +117,11 @@ class Linear(Layer):
 
     weight_shape = (input_shape[-1], self._output_dim)
     bias_shape = (self._output_dim, )
+
+    if self._identify_initial:
+      self._weight_initializer = self._weight_initializer(input_shape[1])
+    else:
+      self._weight_initializer = self._weight_initializer
 
     # Use lambda to make getting variable easier
     get_weight_variable = lambda name, fixed_zero=False: self._get_variable(
