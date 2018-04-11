@@ -48,6 +48,14 @@ class Bamboo(Predictor):
     self._train_step = self._train_ops[index]
     self.outputs = self._output_list[index]
 
+  @property
+  def trunk_net(self):
+      trunk_net = []
+      for i, net in enumerate(self.children):
+        if net.is_branch or i == -1:
+          continue
+        trunk_net.append(net)
+      return trunk_net
 
   @with_graph
   def build(self, loss='cross_entropy', lr_list=None, optimizer=None,
@@ -103,6 +111,14 @@ class Bamboo(Predictor):
     self._built = True
 
   @with_graph
+  def train(self, *args, branch_index=0, lr_list=None, **kwargs):
+    layer_train = kwargs.get('layer_train', False)
+    if layer_train:
+      return self._train(*args, branch_index=branch_index, **kwargs)
+    else:
+      return self._train_to_the_top(*args, lr_list=lr_list, **kwargs)
+
+  @with_graph
   def _initial_define(self):
     for i, net in enumerate(self.children):
       if i == 0 or i == len(self.children) - 1:
@@ -115,6 +131,14 @@ class Bamboo(Predictor):
            if isinstance(f, Linear):
              f._weight_initializer = initializers.get('identity')
              f._bias_initializer = initializers.get(tf.zeros_initializer())
+
+  def _initial_define_test(self):
+    for net in self.trunk_net:
+      for var in net.var_list:
+        if 'biases' in var.name or 'bias' in var.name:
+          var.initializers = initializers.get(tf.zeros_initializer())
+        else:
+          var.initializers = initializers.get('identity')
 
   @with_graph
   def _define_train_step(self, optimizer=None, var_list=None):
@@ -159,7 +183,7 @@ class Bamboo(Predictor):
     assert len(self._losses) == len(self._train_ops)
 
   @with_graph
-  def train(self, *args, branch_index=0, **kwargs):
+  def _train(self, *args, branch_index=0, **kwargs):
     self.set_branch_index(branch_index)
     # TODO
     freeze = kwargs.get('freeze', True)
@@ -168,7 +192,7 @@ class Bamboo(Predictor):
     Predictor.train(self, *args, **kwargs)
 
   @with_graph
-  def train_to_the_top(self, *args, lr_list=None, **kwargs):
+  def _train_to_the_top(self, *args, lr_list=None, **kwargs):
     if lr_list is None:lr_list = [0.000088] * self.branches_num
     for i in range(self.branches_num + 1):
       self.set_branch_index(i)
@@ -184,6 +208,7 @@ class Bamboo(Predictor):
       self._optimizer_lr_modify(lr_list[i])
       self._train_step = self._optimizer.minimize(loss=self._losses[i], var_list=self._var_list[i])
       Predictor.train(self, *args, **kwargs)
+
 
   @with_graph
   def _variables_assign(self, index):
