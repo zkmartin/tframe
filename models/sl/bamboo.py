@@ -111,12 +111,13 @@ class Bamboo(Predictor):
     self._built = True
 
   @with_graph
-  def train(self, *args, branch_index=0, lr_list=None, **kwargs):
+  def train(self, *args, branch_index=0, t_branch_s_index=0,  t_branch_e_index=0, lr_list=None, **kwargs):
     layer_train = kwargs.get('layer_train', False)
     if layer_train:
       return self._train(*args, branch_index=branch_index, **kwargs)
     else:
-      return self._train_to_the_top(*args, lr_list=lr_list, **kwargs)
+      return self._train_to_the_top(*args, branch_index_s=t_branch_s_index, branch_index_e=t_branch_e_index,
+                                    lr_list=lr_list, **kwargs)
 
   @with_graph
   def _initial_define(self):
@@ -192,9 +193,13 @@ class Bamboo(Predictor):
     Predictor.train(self, *args, **kwargs)
 
   @with_graph
-  def _train_to_the_top(self, *args, lr_list=None, **kwargs):
+  def _train_to_the_top(self, *args, branch_index_s=0, branch_index_e=0, lr_list=None, **kwargs):
     if lr_list is None:lr_list = [0.000088] * self.branches_num
-    for i in range(self.branches_num + 1):
+    if branch_index_e == 0:
+      train_end_index = self.branches_num + 1
+    else:
+      train_end_index = branch_index_e + 1
+    for i in range(branch_index_s, train_end_index):
       self.set_branch_index(i)
       # TODO
       if i > 0:
@@ -208,6 +213,11 @@ class Bamboo(Predictor):
       self._optimizer_lr_modify(lr_list[i])
       self._train_step = self._optimizer.minimize(loss=self._losses[i], var_list=self._var_list[i])
       Predictor.train(self, *args, **kwargs)
+      if i > 0:
+        self._optimizer_lr_modify(lr_list[i]*0.01)
+        self._train_step = self._optimizer.minimize(loss=self._loss)
+        Predictor.train(self, *args, **kwargs)
+
 
 
   @with_graph
