@@ -18,7 +18,7 @@ class Net(Function):
   """Function which can packet sub-functions automatically when calling add
      method"""
   def __init__(self, name, level=0, inter_type=pedia.cascade,
-               is_branch=False, **kwargs):
+               is_branch=False, is_branch_pl=False, **kwargs):
     """Instantiate Net, a name must be given
        :param level: level 0 indicates the trunk
        :param inter_type: \in {cascade, fork, sum, prod}
@@ -27,6 +27,7 @@ class Net(Function):
     self._level = level
     self._inter_type = inter_type
     self.is_branch = is_branch
+    self.is_branch_pl = is_branch_pl
 
     self.inputs = None
     self._output_scale = None
@@ -211,6 +212,12 @@ class Net(Function):
     self.add(net)
 
     return net
+
+  def add_parallel_branch(self):
+      net = Net(name='branch', is_branch_pl=True)
+      self.add(net)
+
+      return net
 
   def add(self, f=None, inter_type=pedia.cascade):
     # If add an empty net

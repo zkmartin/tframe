@@ -194,7 +194,7 @@ class Bamboo(Predictor):
 
   @with_graph
   def _train_to_the_top(self, *args, branch_index_s=0, branch_index_e=0, lr_list=None, **kwargs):
-    if lr_list is None:lr_list = [0.000088] * self.branches_num
+    if lr_list is None:lr_list = [0.000088] * (self.branches_num + 1)
     if branch_index_e == 0:
       train_end_index = self.branches_num + 1
     else:
@@ -203,9 +203,9 @@ class Bamboo(Predictor):
       self.set_branch_index(i)
       # TODO
       if i > 0:
-         # FLAGS.overwrite = False
+         FLAGS.overwrite = False
          FLAGS.save_best = True
-         # self.launch_model(FLAGS.overwrite and FLAGS.train)
+         self.launch_model(FLAGS.overwrite and FLAGS.train)
          if i == self.branches_num:
           self._branches_variables_assign(0, output=True)
          else:
@@ -213,12 +213,16 @@ class Bamboo(Predictor):
       self._optimizer_lr_modify(lr_list[i])
       self._train_step = self._optimizer.minimize(loss=self._losses[i], var_list=self._var_list[i])
       Predictor.train(self, *args, **kwargs)
-      if i > 0:
-        self._optimizer_lr_modify(lr_list[i]*0.01)
-        self._train_step = self._optimizer.minimize(loss=self._loss)
-        Predictor.train(self, *args, **kwargs)
-
-
+      # if i > 0:
+      #   self._optimizer_lr_modify(lr_list[i]*0.01)
+      #   self._train_step = self._optimizer.minimize(loss=self._loss)
+      #   Predictor.train(self, *args, **kwargs)
+    FLAGS.overwrite = False
+    self.launch_model(FLAGS.overwrite and FLAGS.train)
+    self.set_branch_index(self.branches_num + 1)
+    self._optimizer_lr_modify(lr_list[self.branches_num]*0.01)
+    self._train_step = self._optimizer.minimize(loss=self._loss)
+    Predictor.train(self, *args, **kwargs)
 
   @with_graph
   def _variables_assign(self, index):
@@ -249,9 +253,5 @@ class Bamboo(Predictor):
     self.set_branch_index(index)
     # Call parent's predict method
     return Predictor.predict(self, data, **kwargs)
-
-
-
-
 
 
