@@ -220,7 +220,7 @@ class Bamboo(Predictor):
     FLAGS.overwrite = False
     self.launch_model(FLAGS.overwrite and FLAGS.train)
     self.set_branch_index(self.branches_num + 1)
-    self._optimizer_lr_modify(lr_list[self.branches_num]*0.01)
+    self._optimizer_lr_modify(lr_list[-1])
     self._train_step = self._optimizer.minimize(loss=self._loss)
     Predictor.train(self, *args, **kwargs)
 
