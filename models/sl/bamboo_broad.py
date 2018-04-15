@@ -42,6 +42,7 @@ class Bamboo_Broad(Model, Net):
         self._loss = self._losses[index]
         self._train_step = self._train_ops[index]
         self._metric = self._metrics[index]
+        self.outputs = self._output_list[index]
 
     @with_graph
     def build(self, loss='cross_entropy', optimizer=None,
@@ -131,6 +132,7 @@ class Bamboo_Broad(Model, Net):
         for i in range(self.branches_num):
             self.set_branch_index(i)
             if i > 0:
+                FLAGS.overwrite = False
                 FLAGS.save_best = True
             self._optimizer_lr_modify(lr_list[i])
             Model.train(self, *args, **kwargs)
@@ -141,6 +143,29 @@ class Bamboo_Broad(Model, Net):
         else:
             assert hasattr(self._optimizer, '_leanrning_rate')
             self._optimizer._learning_rate = lr
+
+    def predict(self, data, **kwargs):
+        index = kwargs.get('branch_index', 0)
+        self.set_branch_index(index)
+
+        # Sanity check
+        if not isinstance(data, TFData):
+            raise TypeError('!! Input data must be an instance of TFData')
+        if not self.built: raise ValueError('!! Model not built yet')
+        if self._session is None:
+            self.launch_model(overwrite=False)
+
+        if data.targets is None:
+            outputs = self._session.run(
+                self.outputs,
+                feed_dict=self._get_default_feed_dict(data, is_training=False))
+            return outputs
+        else:
+            outputs, loss = self._session.run(
+                [self.outputs, self._loss],
+                feed_dict=self._get_default_feed_dict(data, is_training=False))
+            return outputs, loss
+
 
 
 
