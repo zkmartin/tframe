@@ -119,11 +119,16 @@ class Bamboo_Broad(Model, Net):
                     var_list = []
 
     @with_graph
-    def train(self, *args, branch_index=0, **kwargs):
+    def train(self, *args, branch_index=0, lr_list=None, **kwargs):
+        if lr_list is None: lr_list = [0.000088]*self.branches_num
         self.set_branch_index(branch_index)
         freeze = kwargs.get('freeze', True)
         if not freeze:
-            self._train_step = self._optimizer.minimize(self._loss)
+            train_step = []
+            for i in range(branch_index + 1):
+                self._optimizer_lr_modify(lr_list[i])
+                train_step.append(self._optimizer.minimize(loss=self._loss, var_list=self._var_list[i]))
+            self._train_step = train_step
 
         Model.train(self, *args, **kwargs)
 
@@ -136,6 +141,8 @@ class Bamboo_Broad(Model, Net):
                 FLAGS.save_best = True
             self._optimizer_lr_modify(lr_list[i])
             Model.train(self, *args, **kwargs)
+        lr_list = [0.000088, 0.00088, 0.000088]
+        self.train(branch_index=self.branches_num, lr_list=lr_list, **kwargs)
 
     def _optimizer_lr_modify(self, lr):
         if hasattr(self._optimizer, '_lr'):
