@@ -130,19 +130,6 @@ class Model(object):
     self._loss = loss
 
   @with_graph
-  def variable_assign(self, tensor1_name, tensor2_name):
-    variables = tf.trainable_variables()
-    for var in variables:
-      if var.name == tensor1_name:
-        global value
-        value = var
-      if var.name == tensor2_name:
-        global ref
-        ref = var
-    self._session.run(tf.assign(ref, value))
-
-
-  @with_graph
   def _define_train_step(self, optimizer=None, var_list=None):
     if self._loss is None:
       raise ValueError('loss has not been defined yet')

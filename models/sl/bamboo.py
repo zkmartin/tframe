@@ -57,6 +57,15 @@ class Bamboo(Predictor):
         trunk_net.append(net)
       return trunk_net
 
+  @property
+  @with_graph
+  def branch_var_list(self):
+    branch_var_list = []
+    for net in self.children:
+      if net.is_branch is True:
+        branch_var_list.append(net.var_list)
+    return branch_var_list
+
   @with_graph
   def build(self, loss='cross_entropy', lr_list=None, optimizer=None,
             metric=None, metric_name='Metric'):
@@ -111,12 +120,16 @@ class Bamboo(Predictor):
     self._built = True
 
   @with_graph
-  def train(self, *args, branch_index=0, t_branch_s_index=0,  t_branch_e_index=0, lr_list=None, **kwargs):
+  def train(self, *args, branch_index=0, t_branch_s_index=0,
+            t_branch_e_index=0, freeze_index=-1,
+            lr_list=None, **kwargs):
     layer_train = kwargs.get('layer_train', False)
     if layer_train:
-      return self._train(*args, branch_index=branch_index, **kwargs)
+      return self._train(*args, branch_index=branch_index,
+                         freeze_index=-1, **kwargs)
     else:
-      return self._train_to_the_top(*args, branch_index_s=t_branch_s_index, branch_index_e=t_branch_e_index,
+      return self._train_to_the_top(*args, branch_index_s=t_branch_s_index,
+                                    branch_index_e=t_branch_e_index,
                                     lr_list=lr_list, **kwargs)
 
   @with_graph
@@ -184,11 +197,24 @@ class Bamboo(Predictor):
     assert len(self._losses) == len(self._train_ops)
 
   @with_graph
-  def _train(self, *args, branch_index=0, **kwargs):
+  def _train(self, *args, branch_index=0, freeze_index=-1, lr_list=None, **kwargs):
     self.set_branch_index(branch_index)
     # TODO
-    freeze = kwargs.get('freeze', True)
-    if not freeze: self._train_step = self._optimizer.minimize(self._loss)
+    branch_train = kwargs.get('branch_train', False)
+    if branch_train:
+      self._train_step = self._optimizer.minimize(loss=self._losses[branch_index],
+                                                  var_list=self.branch_var_list[branch_index])
+    else:
+      if freeze_index == -1:
+        self._train_step = self._optimizer.minimize(self._loss)
+      else:
+        trained_net = self.trunk_net[freeze_index+1:branch_index+1]
+        var_list = [net.var_list for net in trained_net]
+        if lr_list is not None:
+          self._train_step = self.layer_lr(lr_list=lr_list, var_list=var_list)
+        else:
+          self._train_step = self._optimizer.minimize(loss=self._loss, var_list=var_list)
+
     # Call parent's train method
     Predictor.train(self, *args, **kwargs)
 
@@ -201,7 +227,7 @@ class Bamboo(Predictor):
       train_end_index = branch_index_e + 1
     for i in range(branch_index_s, train_end_index):
       self.set_branch_index(i)
-      # TODO
+      # TODO modified the learning rate of the optimizer
       if i > 0:
          FLAGS.overwrite = False
          FLAGS.save_best = True
@@ -213,19 +239,21 @@ class Bamboo(Predictor):
       self._optimizer_lr_modify(lr_list[i])
       self._train_step = self._optimizer.minimize(loss=self._losses[i], var_list=self._var_list[i])
       Predictor.train(self, *args, **kwargs)
-      # if i > 0:
-      #   self._optimizer_lr_modify(lr_list[i]*0.01)
-      #   self._train_step = self._optimizer.minimize(loss=self._loss)
-      #   Predictor.train(self, *args, **kwargs)
     FLAGS.overwrite = False
     FLAGS.save_best = True
     self.launch_model(FLAGS.overwrite and FLAGS.train)
-    self.set_branch_index(self.branches_num)
-    self._optimizer_lr_modify(lr_list[-1]*0.1)
-    self._train_step = self._optimizer.minimize(loss=self._loss)
+    self.set_branch_index(branch_index_e)
+    self._optimizer_lr_modify(lr_list[0]*0.1)
     Predictor.train(self, *args, **kwargs)
 
+  @with_graph
+  def layer_lr(self, lr_list, var_list):
+    train_steps = []
+    for i, var in enumerate(var_list):
+      self._optimizer_lr_modify(lr_list[i])
+      train_steps.append(self._optimizer.minimize(self._loss, var_list=var))
 
+    return train_steps
 
   @with_graph
   def _variables_assign(self, index):
