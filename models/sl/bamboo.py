@@ -126,7 +126,7 @@ class Bamboo(Predictor):
     layer_train = kwargs.get('layer_train', False)
     if layer_train:
       return self._train(*args, branch_index=branch_index,
-                         freeze_index=-1, **kwargs)
+                         freeze_index=freeze_index, **kwargs)
     else:
       return self._train_to_the_top(*args, branch_index_s=t_branch_s_index,
                                     branch_index_e=t_branch_e_index,
